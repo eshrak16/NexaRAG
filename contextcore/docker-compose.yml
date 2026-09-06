@@ -1,0 +1,18 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: contextcore-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: contextcore
+      POSTGRES_USER: contextcore
+      POSTGRES_PASSWORD: contextcore
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
