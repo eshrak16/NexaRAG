@@ -13,13 +13,11 @@ const envSchema = z.object({
   JWT_REFRESH_TOKEN_TTL: z.string().default('7d'),
   JWT_ISSUER: z.string().default('contextcore-api'),
   OPENROUTER_API_KEY: z.string().optional(),
-  EMBEDDING_PROVIDER: z.enum(['openai-compatible']).default('openai-compatible'),
+  EMBEDDING_PROVIDER: z.enum(['openai-compatible', 'local']).default('openai-compatible'),
   EMBEDDING_MODEL: z.string().trim().min(1).default('text-embedding-3-small'),
   EMBEDDING_API_KEY: z.string().optional(),
   EMBEDDING_BASE_URL: z.string().url().default('https://api.openai.com/v1'),
-  EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(1536).refine((value) => value === 1536, {
-    message: 'EMBEDDING_DIMENSIONS must be 1536 for text-embedding-3-small.',
-  }),
+  EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(1536),
   EMBEDDING_BATCH_SIZE: z.coerce.number().int().positive().max(256).default(32),
   EMBEDDING_RETRY_COUNT: z.coerce.number().int().min(0).max(5).default(2),
   CORS_ORIGIN: z.string().optional(),
@@ -27,6 +25,23 @@ const envSchema = z.object({
   DATABASE_PORT: z.coerce.number().int().positive().optional(),
   REDIS_HOST: z.string().optional(),
   REDIS_PORT: z.coerce.number().int().positive().optional(),
+}).superRefine((config, context) => {
+  const expectedDimensions = config.EMBEDDING_PROVIDER === 'local' ? 384 : 1536;
+  if (config.EMBEDDING_DIMENSIONS !== expectedDimensions) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['EMBEDDING_DIMENSIONS'],
+      message: `EMBEDDING_DIMENSIONS must be ${expectedDimensions} for the selected provider.`,
+    });
+  }
+
+  if (config.EMBEDDING_PROVIDER === 'local' && config.EMBEDDING_MODEL !== 'BAAI/bge-small-en-v1.5') {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['EMBEDDING_MODEL'],
+      message: 'Local provider currently supports BAAI/bge-small-en-v1.5 only.',
+    });
+  }
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

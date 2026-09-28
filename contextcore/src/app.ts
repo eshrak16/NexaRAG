@@ -8,6 +8,7 @@ import { documentRoutes } from './routes/document.route.js';
 import { healthRoutes } from './routes/health.route.js';
 import { knowledgeBaseRoutes } from './routes/knowledgebase.route.js';
 import { organizationRoutes } from './routes/organization.route.js';
+import { searchRoutes } from './routes/search.route.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = fastify({
@@ -29,6 +30,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(organizationRoutes);
   await app.register(knowledgeBaseRoutes);
   await app.register(documentRoutes);
+  await app.register(searchRoutes);
   await app.register(healthRoutes);
 
   app.setErrorHandler(

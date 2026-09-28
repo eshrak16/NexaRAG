@@ -7,6 +7,16 @@ export type ReadyEmbedding = {
   contentHash: string;
 };
 
+export type SimilaritySearchHit = {
+  chunkId: string;
+  text: string;
+  chunkIndex: number;
+  documentId: string;
+  documentName: string;
+  originalFileName: string;
+  cosineDistance: number;
+};
+
 function placeholders(count: number, startAt = 1): string {
   return Array.from({ length: count }, (_, index) => `$${index + startAt}`).join(', ');
 }
@@ -16,6 +26,45 @@ function vectorLiteral(vector: number[]): string {
 }
 
 export class EmbeddingRepository {
+  async searchSimilarChunks(
+    vector: number[],
+    knowledgeBaseId: string,
+    provider: string,
+    model: string,
+    dimensions: number,
+    topK: number,
+  ): Promise<SimilaritySearchHit[]> {
+    const query = `SELECT c."id" AS "chunkId",
+        c."content" AS "text",
+        c."chunkIndex" AS "chunkIndex",
+        d."id" AS "documentId",
+        d."name" AS "documentName",
+        d."originalFileName" AS "originalFileName",
+        (e."vector" <=> CAST($1 AS vector))::double precision AS "cosineDistance"
+      FROM "embeddings" e
+      JOIN "document_chunks" c ON c."id" = e."chunkId"
+      JOIN "documents" d ON d."id" = c."documentId"
+      WHERE d."knowledgeBaseId" = $2
+        AND d."status" = 'READY'
+        AND e."status" = 'READY'
+        AND e."provider" = $3
+        AND e."model" = $4
+        AND e."dimensions" = $5
+        AND e."vector" IS NOT NULL
+      ORDER BY e."vector" <=> CAST($1 AS vector) ASC, d."id" ASC, c."chunkIndex" ASC
+      LIMIT $6`;
+
+    return prisma.$queryRawUnsafe<SimilaritySearchHit[]>(
+      query,
+      vectorLiteral(vector),
+      knowledgeBaseId,
+      provider,
+      model,
+      dimensions,
+      topK,
+    );
+  }
+
   async findReadyByChunks(chunkIds: string[], provider: string, model: string): Promise<ReadyEmbedding[]> {
     if (chunkIds.length === 0) {
       return [];

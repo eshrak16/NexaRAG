@@ -11,7 +11,7 @@ function unique(prefix: string): string {
 }
 
 function vector(value: number): number[] {
-  return Array.from({ length: 1536 }, () => value);
+  return Array.from({ length: 384 }, () => value);
 }
 
 async function createEmbeddingFixture(chunkCount: number): Promise<{ documentId: string; userId: string; chunkIds: string[]; firstHash: string }> {
@@ -67,6 +67,7 @@ test('embedding service batches in chunk order and skips matching content hashes
   const batches: string[][] = [];
   const repository = {
     findReadyByChunks: async () => [{ chunkId: fixture.chunkIds[0]!, provider: 'test-provider', model: 'test-model', contentHash: fixture.firstHash }],
+    searchSimilarChunks: async () => [],
     markProcessing: async (_id: string, chunkId: string) => { marked.push(chunkId); },
     saveReady: async (chunkId: string) => { saved.push(chunkId); },
     markFailed: async () => undefined,
@@ -74,7 +75,7 @@ test('embedding service batches in chunk order and skips matching content hashes
   const provider: EmbeddingProvider = {
     provider: 'test-provider',
     model: 'test-model',
-    dimensions: 1536,
+    dimensions: 384,
     embedTexts: async (texts) => {
       batches.push(texts);
       return texts.map((_, index) => vector(index + 1));
@@ -99,6 +100,7 @@ test('embedding service retries transient failures a bounded number of times', a
   let failures = 0;
   const repository = {
     findReadyByChunks: async () => [],
+    searchSimilarChunks: async () => [],
     markProcessing: async () => undefined,
     saveReady: async () => undefined,
     markFailed: async () => { failures += 1; },
@@ -106,7 +108,7 @@ test('embedding service retries transient failures a bounded number of times', a
   const provider: EmbeddingProvider = {
     provider: 'retry-provider',
     model: 'retry-model',
-    dimensions: 1536,
+    dimensions: 384,
     embedTexts: async () => {
       attempts += 1;
       if (attempts < 3) {

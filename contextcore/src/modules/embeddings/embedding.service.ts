@@ -5,6 +5,7 @@ import { prisma } from '../../database/prisma.js';
 import { HttpAuthError } from '../auth/auth.service.js';
 import { knowledgeBaseService } from '../knowledgebase/knowledgebase.service.js';
 import { EmbeddingProvider, EmbeddingProviderError, OpenAICompatibleEmbeddingProvider } from './embedding.provider.js';
+import { BGE_SMALL_DIMENSIONS, BGE_SMALL_MODEL, LocalEmbeddingProvider } from './local-embedding.provider.js';
 import { embeddingRepository, EmbeddingRepository } from './embedding.repository.js';
 
 export type EmbeddingDocumentResult = {
@@ -35,9 +36,17 @@ const silentLogger: EmbeddingLogger = {
   error: () => undefined,
 };
 
-function createConfiguredProvider(): EmbeddingProvider {
+export function createConfiguredProvider(): EmbeddingProvider {
+  if (env.EMBEDDING_PROVIDER === 'local') {
+    return new LocalEmbeddingProvider({ model: env.EMBEDDING_MODEL, dimensions: env.EMBEDDING_DIMENSIONS });
+  }
+
   if (!env.EMBEDDING_API_KEY) {
     throw new Error('Embedding provider API key is not configured.');
+  }
+
+  if (env.EMBEDDING_MODEL === BGE_SMALL_MODEL || env.EMBEDDING_DIMENSIONS === BGE_SMALL_DIMENSIONS) {
+    throw new Error('The local BGE model requires EMBEDDING_PROVIDER=local and cannot use the OpenAI-compatible provider.');
   }
 
   return new OpenAICompatibleEmbeddingProvider({

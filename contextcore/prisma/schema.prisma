@@ -158,7 +158,7 @@ model Embedding {
   contentHash     String
   status          EmbeddingStatus @default(PENDING)
   processingError String?
-  vector          Unsupported("vector(1536)")?
+  vector          Unsupported("vector(384)")?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 

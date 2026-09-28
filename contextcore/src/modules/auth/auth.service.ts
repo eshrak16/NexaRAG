@@ -74,7 +74,6 @@ export class AuthService {
     const signingOptions = {
       expiresIn: expiresIn as SignOptions['expiresIn'],
       issuer: env.JWT_ISSUER,
-      subject: payload.sub,
     } as SignOptions;
 
     return jwt.sign(payload, env.JWT_SECRET, signingOptions);
