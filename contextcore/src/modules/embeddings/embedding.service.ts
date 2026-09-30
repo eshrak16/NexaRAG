@@ -4,6 +4,7 @@ import { env } from '../../config/env.js';
 import { prisma } from '../../database/prisma.js';
 import { HttpAuthError } from '../auth/auth.service.js';
 import { knowledgeBaseService } from '../knowledgebase/knowledgebase.service.js';
+import { can } from '../organizations/permissions.js';
 import { EmbeddingProvider, EmbeddingProviderError, OpenAICompatibleEmbeddingProvider } from './embedding.provider.js';
 import { BGE_SMALL_DIMENSIONS, BGE_SMALL_MODEL, LocalEmbeddingProvider } from './local-embedding.provider.js';
 import { embeddingRepository, EmbeddingRepository } from './embedding.repository.js';
@@ -96,7 +97,7 @@ export class EmbeddingService {
 
     if (userId !== undefined) {
       const membership = await knowledgeBaseService.getMembershipForKnowledgeBase(document.knowledgeBaseId, userId);
-      if (!membership || membership.role === 'VIEWER') {
+      if (!membership || !can(membership.role, 'document:update')) {
         throw new HttpAuthError('FORBIDDEN', 'You do not have permission to embed this document.', 403);
       }
     }

@@ -1,23 +1,36 @@
 import { createHash } from 'node:crypto';
 import { randomUUID } from 'node:crypto';
+import { TextDecoder } from 'node:util';
+import mammoth from 'mammoth';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { z } from 'zod';
 
+import { env } from '../../config/env.js';
 import { prisma } from '../../database/prisma.js';
 import { localStorageProvider } from '../../infrastructure/storage/local-storage.provider.js';
+import { embeddingService } from '../embeddings/embedding.service.js';
 import { knowledgeBaseService } from '../knowledgebase/knowledgebase.service.js';
 import { HttpAuthError } from '../auth/auth.service.js';
 
 export const MAX_CHUNK_SIZE = 1800;
 export const CHUNK_OVERLAP = 0;
 export const CHUNKING_VERSION = 'v1';
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-const SUPPORTED_MIME_TYPES = new Set([
-  'text/plain',
-  'text/markdown',
-  'text/csv',
-  'application/json',
-  'text/html',
-  'application/pdf',
-]);
+const MAX_UPLOAD_BYTES = env.MAX_UPLOAD_SIZE_MB * 1024 * 1024;
+const MAX_PDF_PAGES = 200;
+const MAX_EXTRACTED_CHARACTERS = 5_000_000;
+const MAX_DOCX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024;
+const MAX_DOCX_ENTRIES = 1000;
+type SupportedExtension = 'pdf' | 'docx' | 'txt';
+const MIME_TYPES: Record<SupportedExtension, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  txt: 'text/plain',
+};
+const uploadMetadataSchema = z.object({
+  originalFileName: z.string().trim().min(1, 'A file name is required.').max(255, 'File name is too long.'),
+  mimeType: z.string().trim().min(1, 'A file content type is required.').max(200),
+  fileSize: z.number().int().min(1, 'Uploaded file cannot be empty.').max(MAX_UPLOAD_BYTES, `Uploaded file is too large. Maximum size is ${env.MAX_UPLOAD_SIZE_MB} MB.`),
+});
 
 export type IngestionStatus = 'UPLOADED' | 'PROCESSING' | 'READY' | 'FAILED';
 
@@ -170,83 +183,197 @@ export function chunkText(content: string): ChunkDraft[] {
   return chunks;
 }
 
-function explainFileReadFailure(fileName: string): string {
-  const safeName = fileName.replace(/[\\/]+/g, '/').split('/').pop() ?? 'uploaded file';
-  return `Unable to extract readable content from "${safeName}". Ensure the file is a supported text-based document and try again.`;
+function safeOriginalFileName(fileName: string): string {
+  const baseName = fileName.replace(/\\/g, '/').split('/').pop() ?? '';
+  return baseName.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 255);
 }
 
-async function extractTextFromFile(fileName: string, buffer: Buffer): Promise<string> {
-  const extension = fileName.split('.').pop()?.toLowerCase() ?? '';
+function getAllowedExtension(fileName: string): SupportedExtension {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  if (extension !== 'pdf' && extension !== 'docx' && extension !== 'txt') {
+    throw new Error('Unsupported file type. Supported formats are PDF, DOCX, and TXT.');
+  }
+  return extension;
+}
 
+function validateMimeType(extension: SupportedExtension, providedMimeType: string): void {
+  const mimeType = providedMimeType.split(';', 1)[0]?.trim().toLowerCase();
+  if (mimeType !== MIME_TYPES[extension] && mimeType !== 'application/octet-stream') {
+    throw new Error('The file type does not match its extension.');
+  }
+}
+
+function validateDocxArchive(buffer: Buffer): void {
+  const minimumEocdOffset = Math.max(0, buffer.length - 65_557);
+  let eocdOffset = -1;
+  for (let offset = buffer.length - 22; offset >= minimumEocdOffset; offset -= 1) {
+    if (buffer.readUInt32LE(offset) === 0x06054b50) {
+      eocdOffset = offset;
+      break;
+    }
+  }
+  if (eocdOffset < 0 || buffer.readUInt16LE(eocdOffset + 4) !== 0 || buffer.readUInt16LE(eocdOffset + 6) !== 0) {
+    throw new Error('The DOCX file is malformed or unreadable.');
+  }
+
+  const diskEntries = buffer.readUInt16LE(eocdOffset + 8);
+  const entryCount = buffer.readUInt16LE(eocdOffset + 10);
+  const directorySize = buffer.readUInt32LE(eocdOffset + 12);
+  const directoryOffset = buffer.readUInt32LE(eocdOffset + 16);
+  if (diskEntries !== entryCount || entryCount === 0 || entryCount > MAX_DOCX_ENTRIES
+    || entryCount === 0xffff || directorySize === 0xffffffff || directoryOffset === 0xffffffff
+    || directoryOffset + directorySize > eocdOffset) {
+    throw new Error('The DOCX file is malformed or exceeds processing limits.');
+  }
+
+  let offset = directoryOffset;
+  let totalUncompressedBytes = 0;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (offset + 46 > eocdOffset || buffer.readUInt32LE(offset) !== 0x02014b50) {
+      throw new Error('The DOCX file is malformed or unreadable.');
+    }
+    const flags = buffer.readUInt16LE(offset + 8);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const uncompressedSize = buffer.readUInt32LE(offset + 24);
+    const nameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    if ((flags & 1) !== 0 || compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) {
+      throw new Error('Encrypted and ZIP64 DOCX files are not supported.');
+    }
+    totalUncompressedBytes += uncompressedSize;
+    if (totalUncompressedBytes > MAX_DOCX_UNCOMPRESSED_BYTES) {
+      throw new Error('The DOCX archive exceeds the processing size limit.');
+    }
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  if (offset > directoryOffset + directorySize) throw new Error('The DOCX file is malformed or unreadable.');
+}
+
+export async function extractTextFromFile(extension: string, buffer: Buffer): Promise<string> {
   if (extension === 'txt' || extension === 'md' || extension === 'csv') {
-    return buffer.toString('utf8');
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    } catch {
+      throw new Error('The TXT file is not valid UTF-8 text.');
+    }
+    if (text.includes('\u0000')) throw new Error('The TXT file is not valid UTF-8 text.');
+    return text;
   }
 
   if (extension === 'json') {
-    const parsed = JSON.parse(buffer.toString('utf8'));
-    if (typeof parsed === 'string') {
-      return parsed;
-    }
-    return JSON.stringify(parsed, null, 2);
+    const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer));
+    return typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
   }
 
   if (extension === 'html' || extension === 'htm') {
-    return buffer.toString('utf8').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    return text.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ');
   }
 
-  if (extension === 'pdf') {
-    const raw = buffer.toString('utf8');
-    if (!raw.includes('%PDF-')) {
-      throw new Error(explainFileReadFailure(fileName));
+  if (extension === 'docx') {
+    if (buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
+      throw new Error('The DOCX file is malformed or unreadable.');
     }
-
-    const hasPdfStructure = /\/Type\s*\/((?:Page|Catalog|Pages)|[A-Za-z0-9]+)/i.test(raw) && /stream\s*(?:\r?\n|\r)/i.test(raw) && /endstream/i.test(raw);
-    if (!hasPdfStructure) {
-      throw new Error(explainFileReadFailure(fileName));
-    }
-
-    const textParts = raw.match(/[A-Za-z0-9.,;:!?()\-\s]{20,}/g) ?? [];
-    return textParts.join(' ');
+    validateDocxArchive(buffer);
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value;
   }
 
-  throw new Error(explainFileReadFailure(fileName));
+  const signature = buffer.indexOf(Buffer.from('%PDF-'), 0, 'ascii');
+  if (signature < 0 || signature > 1024) throw new Error('The PDF file is malformed or unreadable.');
+  const loadingTask = getDocument({
+    data: new Uint8Array(buffer),
+    isEvalSupported: false,
+    useSystemFonts: false,
+    stopAtErrors: true,
+    verbosity: 0,
+  } as Parameters<typeof getDocument>[0] & { isEvalSupported: boolean });
+  const pdf = await loadingTask.promise;
+
+  try {
+    if (pdf.numPages < 1 || pdf.numPages > MAX_PDF_PAGES) {
+      throw new Error(`PDF page count exceeds the ${MAX_PDF_PAGES}-page processing limit.`);
+    }
+    const pages: string[] = [];
+    let characterCount = 0;
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const text = content.items.map((item) => 'str' in item ? item.str : '').join(' ');
+      characterCount += text.length;
+      if (characterCount > MAX_EXTRACTED_CHARACTERS) {
+        throw new Error('Extracted document text exceeds the processing limit.');
+      }
+      pages.push(text);
+      page.cleanup();
+    }
+    return pages.join('\n\n');
+  } finally {
+    await loadingTask.destroy();
+  }
 }
 
+export type DocumentEmbedder = Pick<typeof embeddingService, 'embedDocument'>;
+
 export class IngestionService {
+  constructor(private readonly embedder: DocumentEmbedder = embeddingService) {}
+
   async uploadDocument(userId: string, knowledgeBaseId: string, upload: UploadedDocument): Promise<IngestionResult> {
     const membership = await knowledgeBaseService.getMembershipForKnowledgeBase(knowledgeBaseId, userId);
     if (!membership || membership.role === 'VIEWER') {
       throw new HttpAuthError('FORBIDDEN', 'You do not have permission to upload documents.', 403);
     }
 
-    if (upload.buffer.length === 0) {
-      throw new Error('Uploaded file cannot be empty.');
+    const metadata = uploadMetadataSchema.parse({
+      originalFileName: safeOriginalFileName(upload.originalFileName),
+      mimeType: upload.mimeType,
+      fileSize: upload.buffer.length,
+    });
+    const originalFileName = metadata.originalFileName;
+    const extension = getAllowedExtension(originalFileName);
+    validateMimeType(extension, metadata.mimeType);
+    if (extension === 'pdf' && upload.buffer.indexOf(Buffer.from('%PDF-'), 0, 'ascii') < 0) {
+      throw new Error('The uploaded content does not match a PDF file.');
     }
-
-    if (upload.buffer.length > MAX_UPLOAD_BYTES) {
-      throw new Error('Uploaded file is too large. Maximum size is 50 MB.');
-    }
-
-    if (!SUPPORTED_MIME_TYPES.has(upload.mimeType.toLowerCase())) {
-      throw new Error('Unsupported file type. Supported types are TXT, Markdown, CSV, JSON, HTML, and PDF.');
+    if (extension === 'docx' && !(upload.buffer[0] === 0x50 && upload.buffer[1] === 0x4b)) {
+      throw new Error('The uploaded content does not match a DOCX file.');
     }
 
     const documentId = randomUUID();
-    const storagePath = await localStorageProvider.save(knowledgeBaseId, `${documentId}-${upload.originalFileName}`, upload.buffer);
+    const storagePath = await localStorageProvider.save(knowledgeBaseId, `${documentId}.${extension}`, upload.buffer);
     const document = await prisma.document.create({
       data: {
         id: documentId,
         knowledgeBaseId,
-        name: upload.originalFileName,
-        originalFileName: upload.originalFileName,
-        mimeType: upload.mimeType,
+        name: originalFileName,
+        originalFileName,
+        mimeType: MIME_TYPES[extension],
         fileSize: upload.buffer.length,
         storagePath,
         status: 'UPLOADED',
       },
     });
 
-    return this.ingestDocument(document.id);
+    const ingestion = await this.ingestDocument(document.id);
+    if (ingestion.status === 'FAILED') return ingestion;
+
+    try {
+      const embedding = await this.embedder.embedDocument(document.id, userId);
+      if (embedding.status === 'FAILED') {
+        const processingError = 'Document embeddings could not be generated.';
+        await prisma.document.update({ where: { id: document.id }, data: { status: 'FAILED', processingError } });
+        return { ...ingestion, status: 'FAILED', processingError };
+      }
+      return ingestion;
+    } catch {
+      const processingError = 'Document processing failed. Please verify the file and try again.';
+      await prisma.document.update({ where: { id: document.id }, data: { status: 'FAILED', processingError } });
+      return { ...ingestion, status: 'FAILED', processingError };
+    }
   }
 
   async ingestDocument(documentId: string): Promise<IngestionResult> {
@@ -262,7 +389,8 @@ export class IngestionService {
 
     try {
       const fileBuffer = await localStorageProvider.read(document.storagePath ?? '');
-      const extractedText = await extractTextFromFile(document.originalFileName, fileBuffer);
+      const extension = document.originalFileName.split('.').pop()?.toLowerCase() ?? '';
+      const extractedText = await extractTextFromFile(extension, fileBuffer);
       const contentHash = createHash('sha256').update(fileBuffer).digest('hex');
 
       const chunks = chunkText(extractedText);
@@ -304,8 +432,9 @@ export class IngestionService {
         contentHash,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown ingestion failure.';
-      const safeMessage = message.replace(/\\/g, '/').replace(/(C:|localhost|127\.0\.0\.1)/gi, '');
+      const safeMessage = error instanceof Error && error.message.startsWith('No readable text')
+        ? error.message
+        : 'Document processing failed. Please verify the file and try again.';
 
       await prisma.document.update({
         where: { id: documentId },

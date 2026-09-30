@@ -1,5 +1,6 @@
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
 import argon2 from 'argon2';
+import { randomUUID } from 'node:crypto';
 
 import { env } from '../../config/env.js';
 import { prisma } from '../../database/prisma.js';
@@ -50,11 +51,12 @@ export class AuthService {
     });
   }
 
-  private async revokeRefreshTokenById(tokenId: string): Promise<void> {
-    await prisma.refreshToken.update({
-      where: { id: tokenId },
+  private async revokeRefreshTokenById(tokenId: string): Promise<number> {
+    const result = await prisma.refreshToken.updateMany({
+      where: { id: tokenId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    return result.count;
   }
 
   private async revokeRefreshTokensForUser(userId: string): Promise<void> {
@@ -76,7 +78,7 @@ export class AuthService {
       issuer: env.JWT_ISSUER,
     } as SignOptions;
 
-    return jwt.sign(payload, env.JWT_SECRET, signingOptions);
+    return jwt.sign({ ...payload, jti: randomUUID() }, env.JWT_SECRET, signingOptions);
   }
 
   async getUserById(userId: string): Promise<AuthUser | null> {
@@ -185,31 +187,14 @@ export class AuthService {
   async refresh(refreshToken: string): Promise<AuthUserResponse> {
     const payload = this.verifyRefreshToken(refreshToken);
     const tokenHash = hashToken(refreshToken);
-
     const storedRefreshToken = await prisma.refreshToken.findFirst({
-      where: {
-        tokenHash,
-        userId: payload.sub,
-        revokedAt: null,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-      include: {
-        user: true,
-      },
+      where: { tokenHash, userId: payload.sub, revokedAt: null, expiresAt: { gt: new Date() } },
+      include: { user: true },
     });
-
-    if (!storedRefreshToken || !storedRefreshToken.user) {
-      throw new HttpAuthError('INVALID_REFRESH_TOKEN', 'The refresh token is invalid or has expired.', 401);
-    }
-
-    const user = this.toAuthUser(storedRefreshToken.user);
-
-    await this.revokeRefreshTokenById(storedRefreshToken.id);
-    await this.storeRefreshToken(user.id, refreshToken, storedRefreshToken.id);
-
-    return this.issueTokensForUser(user, storedRefreshToken.id);
+    if (!storedRefreshToken?.user) throw new HttpAuthError('INVALID_REFRESH_TOKEN', 'The refresh token is invalid or has expired.', 401);
+    const revokedCount = await this.revokeRefreshTokenById(storedRefreshToken.id);
+    if (revokedCount !== 1) throw new HttpAuthError('INVALID_REFRESH_TOKEN', 'The refresh token is invalid or has already been used.', 401);
+    return this.issueTokensForUser(this.toAuthUser(storedRefreshToken.user), storedRefreshToken.id);
   }
 
   async logout(userId: string, refreshToken?: string): Promise<void> {

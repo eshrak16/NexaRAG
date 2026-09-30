@@ -28,6 +28,12 @@ enum EmbeddingStatus {
   FAILED
 }
 
+enum AdminRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -38,6 +44,9 @@ model User {
 
   memberships    Membership[]
   refreshTokens  RefreshToken[]
+  adminRequests  AdminRoleRequest[] @relation("AdminRequestSubject")
+  reviewedAdminRequests AdminRoleRequest[] @relation("AdminRequestReviewer")
+  auditEvents    AuditEvent[] @relation("AuditActor")
 
   @@map("users")
 }
@@ -69,8 +78,45 @@ model Organization {
 
   memberships    Membership[]
   knowledgeBases KnowledgeBase[]
+  adminRequests  AdminRoleRequest[]
+  auditEvents    AuditEvent[]
 
   @@map("organizations")
+}
+
+model AdminRoleRequest {
+  id             String             @id @default(uuid())
+  organizationId String
+  userId         String
+  status         AdminRequestStatus @default(PENDING)
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("AdminRequestSubject", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy   User?        @relation("AdminRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@index([userId, organizationId, status])
+  @@map("admin_role_requests")
+}
+
+model AuditEvent {
+  id             String   @id @default(uuid())
+  organizationId String
+  actorId        String?
+  action         String
+  targetUserId   String?
+  details        Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@map("audit_events")
 }
 
 model Membership {

@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+import { ZodError } from 'zod';
 
 import { authenticate } from '../modules/auth/auth.middleware.js';
 import { authService, HttpAuthError } from '../modules/auth/auth.service.js';
@@ -21,7 +22,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -50,7 +51,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -79,7 +80,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -126,7 +127,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',

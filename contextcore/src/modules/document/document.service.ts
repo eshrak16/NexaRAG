@@ -1,6 +1,7 @@
 import { prisma } from '../../database/prisma.js';
 import { HttpAuthError } from '../auth/auth.service.js';
 import { OrganizationRole } from '../organizations/organization.types.js';
+import { can } from '../organizations/permissions.js';
 import { knowledgeBaseService } from '../knowledgebase/knowledgebase.service.js';
 import { DocumentListQuery, DocumentSummary } from './document.types.js';
 
@@ -154,7 +155,7 @@ export class DocumentService {
     }
 
     const membership = await knowledgeBaseService.getMembershipForKnowledgeBase(document.knowledgeBaseId, userId);
-    if (!membership || !['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+    if (!membership || !can(membership.role, 'document:update')) {
       throw new HttpAuthError('FORBIDDEN', 'You do not have permission to update this document.', 403);
     }
 
@@ -189,7 +190,7 @@ export class DocumentService {
     }
 
     const membership = await knowledgeBaseService.getMembershipForKnowledgeBase(document.knowledgeBaseId, userId);
-    if (!membership || !['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+    if (!membership || !can(membership.role, 'document:delete')) {
       throw new HttpAuthError('FORBIDDEN', 'You do not have permission to delete this document.', 403);
     }
 

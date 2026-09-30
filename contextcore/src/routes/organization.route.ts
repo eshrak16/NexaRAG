@@ -1,8 +1,9 @@
 import { FastifyInstance } from 'fastify';
+import { ZodError } from 'zod';
 
 import { authenticate } from '../modules/auth/auth.middleware.js';
 import { HttpAuthError } from '../modules/auth/auth.service.js';
-import { requireOrganizationMembership, requireOrganizationRole } from '../modules/organizations/organization.authorization.js';
+import { requireOrganizationMembership, requireOrganizationPermission } from '../modules/organizations/organization.authorization.js';
 import { addMemberSchema, createOrganizationSchema, organizationIdParamSchema, memberIdParamSchema, updateMemberRoleSchema, updateOrganizationSchema } from '../modules/organizations/organization.schema.js';
 import { organizationService } from '../modules/organizations/organization.service.js';
 
@@ -27,7 +28,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -92,7 +93,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -105,7 +106,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch('/api/v1/organizations/:id', { preHandler: [authenticate, requireOrganizationRole(['OWNER', 'ADMIN'])] }, async (request, reply) => {
+  app.patch('/api/v1/organizations/:id', { preHandler: [authenticate, requireOrganizationPermission('organization:update')] }, async (request, reply) => {
     try {
       const params = organizationIdParamSchema.parse(request.params);
       const body = updateOrganizationSchema.parse(request.body);
@@ -122,7 +123,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -135,7 +136,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get('/api/v1/organizations/:id/members', { preHandler: [authenticate, requireOrganizationMembership] }, async (request, reply) => {
+  app.get('/api/v1/organizations/:id/members', { preHandler: [authenticate, requireOrganizationPermission('member:read')] }, async (request, reply) => {
     try {
       const params = organizationIdParamSchema.parse(request.params);
       const members = await organizationService.listMembers(params.id);
@@ -150,7 +151,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -163,7 +164,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post('/api/v1/organizations/:id/members', { preHandler: [authenticate, requireOrganizationRole(['OWNER', 'ADMIN'])] }, async (request, reply) => {
+  app.post('/api/v1/organizations/:id/members', { preHandler: [authenticate, requireOrganizationPermission('organization:members:manage')] }, async (request, reply) => {
     try {
       const params = organizationIdParamSchema.parse(request.params);
       const body = addMemberSchema.parse(request.body);
@@ -179,7 +180,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -192,7 +193,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch('/api/v1/organizations/:id/members/:userId', { preHandler: [authenticate, requireOrganizationRole(['OWNER', 'ADMIN'])] }, async (request, reply) => {
+  app.patch('/api/v1/organizations/:id/members/:userId', { preHandler: [authenticate, requireOrganizationPermission('organization:members:manage')] }, async (request, reply) => {
     try {
       const params = {
         id: (request.params as { id: string }).id,
@@ -211,7 +212,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      if (error instanceof Error) {
+      if (error instanceof ZodError) {
         return reply.status(400).send({
           error: {
             code: 'VALIDATION_ERROR',
@@ -224,7 +225,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.delete('/api/v1/organizations/:id/members/:userId', { preHandler: [authenticate, requireOrganizationRole(['OWNER', 'ADMIN'])] }, async (request, reply) => {
+  app.delete('/api/v1/organizations/:id/members/:userId', { preHandler: [authenticate, requireOrganizationPermission('organization:members:manage')] }, async (request, reply) => {
     try {
       const params = {
         id: (request.params as { id: string }).id,

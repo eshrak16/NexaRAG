@@ -1,0 +1,303 @@
+Q1. Advantages of object oriented programming language.
+Object-oriented programming (OOP) offers several advantages:
+1. *Modularity*: OOP allows you to break down your software into smaller, manageable modules or objects. This makes it easier to maintain, update, and debug code.
+2. *Reusability*: Objects can be reused in different parts of the program or in different programs altogether, saving development time and effort.
+3. *Encapsulation*: Objects encapsulate data and behavior together, hiding the internal state and requiring interaction only through well-defined interfaces. This enhances security and reduces system complexity.
+4. *Abstraction*: OOP allows you to create abstract data types that model real-world entities. This helps in understanding the code and designing systems more intuitively.
+5. *Inheritance*: Inheritance allows new classes to be derived from existing ones, inheriting their properties and behaviors. This promotes code reuse and enables the creation of hierarchical relationships between classes.
+6. *Polymorphism*: Polymorphism allows objects of different classes to be treated as objects of a common superclass. This promotes flexibility and simplifies code maintenance by enabling the use of the same interface for different types of objects.
+
+Q2.what are identifiers?List the rules of making identifiers.
+ans:Identifiers are names given to differnt user defined things like variables,constants,functions,classes,objects,structures,unions,etc. They help developers refer to these elements in the code.while making these identifiers we need to follow some rules.these rules are below:
+1.The identifier can consist of alphabets,digits and a special symbol i.e,"_"(underscore).
+2.An identifier cannot start with a digit.It can start either with an alphabet or underscore.
+3.It cannot contain any special symbol except underscore.Blank spaces are also not allowed.
+4.It cannot be a keyword.
+5.It is case sensitive i.e, an aplhabet capital in one identifier with same name in another identifier with that alphabet small case will be considered differnt.
+6. Earlier:there was a limit of lngth to be 32 characters ,but now this is removed.hence,an identifier can be as long as required and minimum of one character.
+
+Q3.List and explain the data types in c++?
+ans:the data type decides the type of data and the memory locations required for storing the type of data in the memory.
+The data types of c/c++ can be divided into three types:Primitive,derived and user defined data types.
+The different primitive types of data that can be used in c/c++ are integer,character,fraction type numbers,etc.
+The differnt primitive data types and the memory space required for storing them.
+srno.  data type   Type of data to be stored    Range        space required in memory
+1.  char            1 character in ASCII form   -127 to 128     1    
+2. signed char      1 character in ASCII form   -127 to 128      1
+3. unsigned char    1 character in ASCII form   0 to 255         1
+4. int              integer nos.            -32768to 32767        2
+5.signed int        integer nos.            -32768to 32767        2
+6. unsigned int    integer nos.             0 to 65535             2  
+7.long int        integer number  -2147483648 to 2147483647       4
+8. float          Fraction number     3.4e-38 to 3.4e-38         4
+9.double          Fraction number     1.7e-308 to 1.7e-308        8
+
+Q4.Write a short note on constraints and variable in c++?
+ans: In C++, constraints and variables are fundamental concepts in oops programming. 
+
+1. *Constraints:* Constraints are conditions or limitations applied to variables. They define the range of values or properties that a variable can have. In C++, constraints can be enforced through various means such as conditional statements (if-else), loops, or explicit checks within the code. For example, constraints can restrict a variable to be within a certain range, to meet specific conditions, or to adhere to certain data types.
+
+2. *Variables:* Variables are containers used to store data values in a program. They have a name, a data type, and a value associated with them. In C++, variables must be declared before they can be used, specifying the data type they will hold. Variables can hold different types of data such as integers, floating-point numbers, characters, and user-defined types.
+
+Q5.DIstinguish between procedure-oriented programming and  object oriented programming.
+Ans:refers arshans answer sheet (behen ke lode ye toh padhle ,varna du buckkel bol du du buckkel.
+
+Q6.Compare while loop and do while loop.
+ans:refer text book 2-6 pgno
+
+Q7.Explain the syntax and operation of the switch case statement.
+ans:Using switch-case the if-else ladder can be implemented in a much better way.
+The syntax of switch-case is given below :
+switch(expression / variable)
+{
+case label1: statements;
+        break;
+case label2:statements;
+        break;
+case label3:statements;
+        break;
+      I
+      I
+case labeln:statements;
+        break;
+default : statements;
+}
+Note: Break statement transfers the control outside the current loop. We will see some more cases of break statement
+along with the for / while /do-while statements.
+
+. The expression or variable can be given in the brackets associated with the switch statement. The values of this
+expression / variable are the labels associated with the cases inside the switch statement.
+. The value of the expression / variable is first compared with the label1. If they are equal, then the statements
+followed by the corresponding case are executed. The break statement followed by these statements, transfers
+the control after the switch statement.
+. If the expression / variable is not equal to label1, then it is directly compared to label2 without executing the
+statements followed by the label1.
+Hence the statements of only that case are executed with the correct label value of the expression / variable.
+
+Q9.Short note on Array.
+Ans:. It is a collection of multiple data of same data type. For example we can have an array of int type data or float
+Remember, array can have data of same type only i.e. all elements of an array have to be of same type only. We cannot have an array of combination of different data types.
+We need to note two very important points about array
+1. The starting index i.e. index of the first element of an array is always zero.
+2. The index of last element is n-1, where n is the size of the array.
+. An array has static memory allocation i.e. memory size once allocated for an array cannot be changed
+. Syntax of declaring an array :
+data_type array_name [array_size];
+where,
+data_type is the data type like int, float, double etc.
+array_name is the identifier i.e. the name of the variable
+array_size is an integer value which determines size of the array or memory locations to be allocated to an array.
+
+Q10.Short note on Multidimensional Array.
+ans:Multi dimensional arrays are used to store data that requires multiple references for e.g. a matrix requires tworeferences namely row number and column number. Hence, "matrix" is a best example of two dimensional arrays.
+We can also have an array of more than two dimensions. But, we will not require an array of more than two
+dimensions as per our syllabus.
+If an two dimensional array i.e. matrix is to be declared of a size 3 x 3, then the declaration statement will be as
+below :
+int a[3][3];
+The size of the array will be 3 x 3, but the indices will be from 0 to 2 in both the rows and columns. The
+representation of the same can be as shown 
+     0          1        2
+0  a[0][o]    a[0][1]   a[0][2]  
+1  a[1][1]    a[1][1]   a[1][2]
+2  a[2][0]    a[2][1]   a[2][2]As seen in the Fig. 2.9.1, the first brackets indicate the row number while the second brackets indicate the column number. To understand how a matrix element can be accessed Fig. 2.9.1 explains it all, but the elements of this matrix are stored in a different manner in the memory as shown in Fig.2.9.1. This figure assumes the values in matrix as 1, 2, 3 ... 9.
+          Memory
+a[o][o]    1
+a[1][o]    2
+a[2][0]    3 
+a[0][1]    4
+a[1][1]    5
+a[2][1]    6
+a[0][2]    7
+a[1][2]    8
+a[2][2]    9
+. As shown in Fig. 2.9.2, the elements are stored in a sequential manner with all the elements of a row together
+one below the other, and then the next row and so on.
+. The method of accepting elements of an m x n matrix and displaying it in natural form is shown in Program 2.9.1
+(Note: m is the number of rows and n is the number of columns).
+. The values of m and n must be taken from user.
+Natural form display of a 2 x 4 matrix is as shown below.
+1 2 3 4
+5 6 7 8
+
+Q10. State and explain UML.
+Q11.explain classes and object.
+. In 1991, Grady Booch published a methodology for analysis and design of objected oriented programming and is
+widely used.
+The Booch method not only helps in designing the object-oriented system, but also covers the analysis of these
+systems. It defines different models required to describe a system. It also supports the iterative and incremental
+development of systems. The different diagrams that the Booch method consists are :
+1. Class diagrams   2.Object diagrams  3.state transition diagrams
+4.Module diagrams   5.Process diagrams 6.Interaction diagrams
+Class and Object Diagrams
+. Class diagrams are the backbone of object-oriented programming methodology. They describe the stan
+structure of a system.
+. The class diagram contains the class name, its attributes i.e. the variable and the methods or the operations. The
+template of a class diagram is shown in the Fig. 2.11.1 below.
+                  Class name
+
+                  Attributes
+                  methods()
+. Object diagrams are almost linked to the class diagrams. As an object is an instance of a class, similarly the object
+diagram can be viewed as an instance of a class diagram.
+. Object diagrams also describe the static structure of a system but at a particular time. The object diagrams are
+used to test the accuracy of class diagrams.
+. The object diagram as shown in the Fig. 2.11.2 below consists of the attributes of the variables of the object
+                        Object name
+ 
+                        Attributes
+. State transition and interaction diagrams are used to demonstrate the dynamic nature of the system. An example
+of the interaction diagram is shown in the Fig. 2.11.3 below.
+                       diagrams is there
+The module diagrams are used to show the allocation of classes and objects to various modules in the physical
+design of a system. In other words, the module diagrams indicate the partitioning of the system architecture. The
+module diagram is made up of modules and their dependencies.
+The process diagram is used to show the allocation of various processes to processors in the physical design of a
+system. We can understand from these diagrams the collection of processors and devices that work as a
+platform to execute the system. The process diagram is made up of processors, devices, and their connections.
+An example of the process diagram is shown in the Fig. 2.11.4 below.
+       diagram willl be there
+
+
+Q13.explain implict and explicit type casting.
+ANs:Implicit Type Casting: Implicit type casting, also known as automatic type conversion, occurs when the compiler automatically converts one data type to another without any explicit instructions from the programmer. This usually happens when a narrower data type is assigned to a broader data type. For example:
+int a = 10;
+double b = a; // Implicit conversion from int to double
+
+In this example, the integer variable a is implicitly converted to a double when assigned to the variable b. This happens because a double can represent a wider range of values compared to an int, so the conversion is safe and automatic.
+
+Explicit Type Casting: Explicit type casting, also known as type casting or type conversion, occurs when the programmer explicitly instructs the compiler to convert one data type to another. This is done using type casting operators. There are different types of explicit type casting operators in C++, such as static_cast, dynamic_cast, reinterpret_cast, and const_cast.
+
+double b = 10.5;
+int a = static_cast<int>(b); // Explicit conversion from double to int using static_cast
+In this example, the static_cast operator is used to explicitly convert the double variable b to an integer and assign it to the variable a.
+
+13.Explain the rules of making varaibles?
+answer:In C++, variables are named memory locations used to store data. Here are the rules for naming variables in C++:
+1. Variable names must start with a letter (a-z or A-Z) or an underscore (_).
+2. After the first character, variable names can contain letters, digits (0-9), and underscores.
+3. C++ is case-sensitive, so uppercase and lowercase letters are distinct. For example, "myVar" and "MyVar" are different variables.
+4. Variable names cannot be keywords or reserved words, such as "int", "double", "if", "for", etc.
+5. Variable names should be descriptive and meaningful to enhance code readability.
+6. There is no limit to the length of variable names, but it's recommended to keep them concise and clear.
+7. Avoid using special characters like $, %, &, etc., in variable names, as they are not allowed.
+
+
+
+
+UNIT -2
+
+Q1Explain default constructor with examples.
+answer:.
+
+If a constructor does not have any parameter list i.e. it cannot accept any parameters than it is called as a defa
+constructor.
+. Thus, the default constructor has the blank brackets indicating no parameters can be accepted.
+Let us initialize the values of the variable radius of the class circle, using default constructor and the value of
+variable 'n' for the below programs.
+program
+(a)compute() for calculating the area
+(b)display() for displaying th result
+# include<iostream.h>
+# include<conio.h>
+class circle
+{
+     float r,a;
+     public:
+     circle()
+     {
+          cout << "Enter the value of radius:";
+          cin>>r;
+     }
+     void compute();
+     void display0;
+};
+inline void circle::compute()
+{
+a=3.14*r*r;
+}
+inline void circle :: display(
+{
+cout << "Area=" << a;
+}
+void main(
+{
+clrscr():
+circle c;
+c.compute();
+c.display0;
+getchO;
+}           output: Enter radius:5
+            Area:78.5
+The special function with the name of the class i.e. 'circle' is a constructor. This constructor is not called in the
+main function, but as discussed it is automatically called when the object of the class is made.
+When compared to the previous program, the task of initializing the value of the variable 'r' is done in the
+constructor, while the remaining logic is similar.
+
+Q2.Concept of Constructor and Destructor.
+answer:Constructor:
+
+A constructor is a special member function with the same name as the class, used to initialize objects of that class.
+Constructors are automatically called when an object of the class is created.
+Constructors can have parameters (parameterized constructors) or no parameters (default constructors).
+If no constructor is provided by the programmer, C++ provides a default constructor implicitly.
+Constructors can be overloaded, meaning a class can have multiple constructors with different parameters.
+
+Destructor:
+
+A destructor is a special member function with the same name as the class but prefixed with a tilde (~). For example, for class MyClass, the destructor is ~MyClass().
+Destructors are automatically called when an object goes out of scope, or delete operator is used to deallocate memory allocated with new.
+Destructors are used to release resources (like dynamic memory, file handles, etc.) acquired by the object during its lifetime.
+C++ automatically generates a default destructor if one is not provided by the programmer. The default destructor does nothing.
+
+
+3.	Explain the concept of function overloading.
+ans:Function overloading refers to creating multiple functions with the same name but different parameter list.
+*Different parameter list can be with reference to the number of parameters or the type of parameters.
+*Since, for overloaded functions the functions have same name, a function can be called with the common na
+but the function that will be invoked is based on the parameter type and number of parameters.
+*This concept of function overloading is also called as function polymorphism.
+*Let us see some program examples of function overloading.
+# include<iostream.h>
+# include<conio.h>
+float add(float a, int b)
+{
+   float c;
+   c=a+b; 
+   return c;
+}
+int add(int a, int b)
+{
+   int c;
+   c=a+b;
+   return c;
+}
+
+float add(float a, float b)
+{
+   float c;
+   c=a+b;
+   return c;
+}
+void main()
+{
+   cirscr();
+   int x,a=5,b=6;
+   float y,p=3.5,q=6.6;
+   x=add(a,b);
+   cout << "Sum=" << x << endl;
+   y=add(p,q);
+   cout << "Sum=" << y << endl;
+   y=add(p,a);
+   cout << "Sum=" << y << endl;
+   getch();
+}
+output :
+Sum=11
+Sum=10.1
+Sum=8.5
+
+4.	Explain Encapsulation with examples.
+
+
+

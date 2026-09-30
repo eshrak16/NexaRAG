@@ -10,11 +10,11 @@ export const updateOrganizationSchema = z.object({
 
 export const addMemberSchema = z.object({
   email: z.string().trim().email('A valid email address is required.'),
-  role: z.enum(['ADMIN', 'MEMBER', 'VIEWER']),
+  role: z.enum(['MEMBER', 'VIEWER']),
 });
 
 export const updateMemberRoleSchema = z.object({
-  role: z.enum(['ADMIN', 'MEMBER', 'VIEWER']),
+  role: z.enum(['MEMBER', 'VIEWER']),
 });
 
 export const organizationIdParamSchema = z.object({

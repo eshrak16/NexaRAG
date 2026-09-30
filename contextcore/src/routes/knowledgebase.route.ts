@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 
 import { authenticate } from '../modules/auth/auth.middleware.js';
 import { HttpAuthError } from '../modules/auth/auth.service.js';
-import { requireKnowledgeBaseMembership, requireKnowledgeBaseRole } from '../modules/knowledgebase/knowledgebase.authorization.js';
+import { requireKnowledgeBaseMembership, requireKnowledgeBasePermission } from '../modules/knowledgebase/knowledgebase.authorization.js';
 import { createKnowledgeBaseSchema, knowledgeBaseIdParamSchema, knowledgeBaseQuerySchema, updateKnowledgeBaseSchema } from '../modules/knowledgebase/knowledgebase.schema.js';
 import { knowledgeBaseService } from '../modules/knowledgebase/knowledgebase.service.js';
 
@@ -81,7 +81,7 @@ export async function knowledgeBaseRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch('/api/v1/knowledge-bases/:id', { preHandler: [authenticate, requireKnowledgeBaseRole(['OWNER', 'ADMIN', 'MEMBER'])] }, async (request, reply) => {
+  app.patch('/api/v1/knowledge-bases/:id', { preHandler: [authenticate, requireKnowledgeBasePermission('knowledge_base:update')] }, async (request, reply) => {
     try {
       const params = knowledgeBaseIdParamSchema.parse(request.params);
       const body = updateKnowledgeBaseSchema.parse(request.body);
@@ -105,7 +105,7 @@ export async function knowledgeBaseRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.delete('/api/v1/knowledge-bases/:id', { preHandler: [authenticate, requireKnowledgeBaseRole(['OWNER', 'ADMIN'])] }, async (request, reply) => {
+  app.delete('/api/v1/knowledge-bases/:id', { preHandler: [authenticate, requireKnowledgeBasePermission('knowledge_base:delete')] }, async (request, reply) => {
     try {
       const params = knowledgeBaseIdParamSchema.parse(request.params);
       if (!request.user) {

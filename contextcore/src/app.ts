@@ -4,6 +4,8 @@ import multipart from '@fastify/multipart';
 
 import { env } from './config/env.js';
 import { authRoutes } from './routes/auth.route.js';
+import { adminRoutes } from './routes/admin.route.js';
+import { askRoutes } from './routes/ask.route.js';
 import { documentRoutes } from './routes/document.route.js';
 import { healthRoutes } from './routes/health.route.js';
 import { knowledgeBaseRoutes } from './routes/knowledgebase.route.js';
@@ -23,10 +25,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(multipart, {
-    limits: { fileSize: 50 * 1024 * 1024, files: 1 },
+    limits: { fileSize: env.MAX_UPLOAD_SIZE_MB * 1024 * 1024, files: 1 },
   });
 
   await app.register(authRoutes);
+  await app.register(adminRoutes);
+  await app.register(askRoutes);
   await app.register(organizationRoutes);
   await app.register(knowledgeBaseRoutes);
   await app.register(documentRoutes);

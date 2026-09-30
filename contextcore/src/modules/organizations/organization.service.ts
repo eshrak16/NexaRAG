@@ -115,7 +115,7 @@ export class OrganizationService {
     };
   }
 
-  async listMembers(organizationId: string): Promise<Array<{ userId: string; name: string; email: string; role: OrganizationRole }>> {
+  async listMembers(organizationId: string): Promise<Array<{ userId: string; name: string; email: string; role: OrganizationRole; createdAt: Date }>> {
     const memberships = await prisma.membership.findMany({
       where: { organizationId },
       include: {
@@ -135,13 +135,11 @@ export class OrganizationService {
       name: membership.user.name,
       email: membership.user.email,
       role: membership.role,
+      createdAt: membership.createdAt,
     }));
   }
 
-  async addMember(organizationId: string, email: string, role: Exclude<OrganizationRole, 'OWNER'>, actorRole?: OrganizationRole): Promise<{ userId: string; role: OrganizationRole }> {
-    if (actorRole === 'ADMIN' && role === 'ADMIN') {
-      throw new HttpAuthError('FORBIDDEN', 'Admin users may only add MEMBER or VIEWER roles.', 403);
-    }
+  async addMember(organizationId: string, email: string, role: Exclude<OrganizationRole, 'OWNER' | 'ADMIN'>, _actorRole?: OrganizationRole): Promise<{ userId: string; role: OrganizationRole }> {
 
     const user = await prisma.user.findUnique({
       where: { email },
@@ -192,7 +190,7 @@ export class OrganizationService {
     return membership ? { ...membership, organizationId: membership.organizationId, userId: membership.userId } : null;
   }
 
-  async changeMemberRole(organizationId: string, targetUserId: string, nextRole: Exclude<OrganizationRole, 'OWNER'>, actorRole?: OrganizationRole): Promise<{ userId: string; role: OrganizationRole }> {
+  async changeMemberRole(organizationId: string, targetUserId: string, nextRole: Exclude<OrganizationRole, 'OWNER' | 'ADMIN'>, actorRole?: OrganizationRole): Promise<{ userId: string; role: OrganizationRole }> {
     const ownerCount = await prisma.membership.count({
       where: {
         organizationId,
@@ -218,9 +216,6 @@ export class OrganizationService {
         throw new HttpAuthError('FORBIDDEN', 'Admin users may only modify MEMBER and VIEWER roles.', 403);
       }
 
-      if (nextRole === 'ADMIN') {
-        throw new HttpAuthError('FORBIDDEN', 'Admin users may not assign the ADMIN role.', 403);
-      }
     }
 
     if (targetMembership.role === 'OWNER') {

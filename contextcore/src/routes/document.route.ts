@@ -6,7 +6,7 @@ import { documentService } from '../modules/document/document.service.js';
 import { ingestionService } from '../modules/ingestion/ingestion.service.js';
 import { embeddingService } from '../modules/embeddings/embedding.service.js';
 import { createDocumentSchema, documentIdParamSchema, documentQuerySchema, knowledgeBaseDocumentIdParamSchema, updateDocumentSchema } from '../modules/document/document.schema.js';
-import { requireKnowledgeBaseMembership, requireKnowledgeBaseRole } from '../modules/knowledgebase/knowledgebase.authorization.js';
+import { requireKnowledgeBaseMembership, requireKnowledgeBasePermission } from '../modules/knowledgebase/knowledgebase.authorization.js';
 
 export async function documentRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/v1/documents/:id/embed', { preHandler: [authenticate] }, async (request, reply) => {
@@ -31,7 +31,7 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post('/api/v1/knowledge-bases/:knowledgeBaseId/documents/upload', { preHandler: [authenticate, requireKnowledgeBaseRole(['OWNER', 'ADMIN', 'MEMBER'])] }, async (request, reply) => {
+  app.post('/api/v1/knowledge-bases/:knowledgeBaseId/documents/upload', { preHandler: [authenticate, requireKnowledgeBasePermission('document:upload')] }, async (request, reply) => {
     try {
       const params = knowledgeBaseDocumentIdParamSchema.parse(request.params);
       if (!request.user) {
@@ -55,15 +55,15 @@ export async function documentRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(error.statusCode).send({ error: { code: error.code, message: error.message } });
       }
 
-      if (error instanceof Error) {
-        return reply.status(400).send({ error: { code: 'UPLOAD_ERROR', message: error.message } });
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'FST_REQ_FILE_TOO_LARGE') {
+        return reply.status(413).send({ error: { code: 'FILE_TOO_LARGE', message: 'The uploaded file exceeds the configured size limit.' } });
       }
 
-      throw error;
+      return reply.status(400).send({ error: { code: 'UPLOAD_ERROR', message: 'The upload could not be accepted. Check the file format and size.' } });
     }
   });
 
-  app.post('/api/v1/knowledge-bases/:knowledgeBaseId/documents', { preHandler: [authenticate, requireKnowledgeBaseRole(['OWNER', 'ADMIN', 'MEMBER'])] }, async (request, reply) => {
+  app.post('/api/v1/knowledge-bases/:knowledgeBaseId/documents', { preHandler: [authenticate, requireKnowledgeBasePermission('document:upload')] }, async (request, reply) => {
     try {
       const params = knowledgeBaseDocumentIdParamSchema.parse(request.params);
       const body = createDocumentSchema.parse(request.body);

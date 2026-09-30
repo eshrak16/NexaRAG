@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { deflateRawSync } from 'node:zlib';
 
+import { env } from '../../config/env.js';
 import { prisma } from '../../database/prisma.js';
-import { CHUNKING_VERSION, MAX_CHUNK_SIZE, chunkText, ingestionService } from './ingestion.service.js';
+import { CHUNKING_VERSION, MAX_CHUNK_SIZE, chunkText, extractTextFromFile, IngestionService, ingestionService } from './ingestion.service.js';
 import { localStorageProvider } from '../../infrastructure/storage/local-storage.provider.js';
 
 function unique(prefix: string): string {
@@ -172,7 +174,7 @@ test('failed extraction stores a safe processing error and preserves the documen
   assert.ok(!result.processingError.includes('C:\\') && !result.processingError.includes('localhost'));
 });
 
-test('uploadDocument validates the tenant and supported file type before ingestion', async () => {
+test('uploadDocument validates the tenant and supported file type before ingestion', async (t) => {
   const userId = unique('upload-user');
   const organization = await prisma.organization.create({
     data: { name: unique('upload-org'), slug: `upload-org-${Date.now()}` },
@@ -189,21 +191,174 @@ test('uploadDocument validates the tenant and supported file type before ingesti
   const knowledgeBase = await prisma.knowledgeBase.create({
     data: { organizationId: organization.id, name: unique('upload-kb') },
   });
+  t.after(async () => {
+    await prisma.organization.deleteMany({ where: { id: organization.id } });
+    await prisma.user.deleteMany({ where: { id: userId } });
+  });
 
-  const result = await ingestionService.uploadDocument(userId, knowledgeBase.id, {
+  let embeddingCalls = 0;
+  const service = new IngestionService({
+    embedDocument: async (documentId, requestingUserId) => {
+      embeddingCalls += 1;
+      assert.equal(requestingUserId, userId);
+      return { documentId, provider: 'local', model: 'BAAI/bge-small-en-v1.5', status: 'READY', totalChunks: 1, embeddedChunks: 1, skippedChunks: 0, failedChunks: 0 };
+    },
+  });
+
+  const result = await service.uploadDocument(userId, knowledgeBase.id, {
     originalFileName: 'notes.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('Uploaded through the ingestion service.'),
   });
 
   assert.equal(result.status, 'READY');
+  assert.equal(embeddingCalls, 1);
+  const storedDocument = await prisma.document.findUniqueOrThrow({ where: { id: result.id } });
+  assert.match(storedDocument.storagePath ?? '', new RegExp(`${result.id}\\.txt$`));
+  assert.equal(storedDocument.mimeType, 'text/plain');
+  assert.equal(storedDocument.originalFileName, 'notes.txt');
 
   await assert.rejects(
-    () => ingestionService.uploadDocument(userId, knowledgeBase.id, {
+    () => service.uploadDocument(userId, knowledgeBase.id, {
       originalFileName: 'notes.exe',
       mimeType: 'application/octet-stream',
       buffer: Buffer.from('not supported'),
     }),
     /Unsupported file type/,
   );
+  await assert.rejects(
+    () => service.uploadDocument(userId, knowledgeBase.id, {
+      originalFileName: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0),
+    }),
+    /cannot be empty/,
+  );
+  await assert.rejects(
+    () => service.uploadDocument(userId, knowledgeBase.id, {
+      originalFileName: 'notes.pdf', mimeType: 'text/plain', buffer: Buffer.from('%PDF-1.7'),
+    }),
+    /does not match its extension/,
+  );
+
+  const otherUserId = unique('foreign-upload-user');
+  await assert.rejects(
+    () => service.uploadDocument(otherUserId, knowledgeBase.id, {
+      originalFileName: 'other.txt', mimeType: 'text/plain', buffer: Buffer.from('must not be accepted'),
+    }),
+    (error: unknown) => error instanceof Error && 'statusCode' in error && error.statusCode === 403,
+  );
+
+  await assert.rejects(
+    () => service.uploadDocument(userId, knowledgeBase.id, {
+      originalFileName: 'large.txt', mimeType: 'text/plain', buffer: Buffer.alloc(env.MAX_UPLOAD_SIZE_MB * 1024 * 1024 + 1),
+    }),
+    /too large/,
+  );
+
+  const failed = await service.uploadDocument(userId, knowledgeBase.id, {
+    originalFileName: 'broken.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7 malformed'),
+  });
+  assert.equal(failed.status, 'FAILED');
+  const failedDocument = await prisma.document.findUniqueOrThrow({ where: { id: failed.id } });
+  assert.equal(failedDocument.status, 'FAILED');
+  assert.ok(failedDocument.processingError);
+
+  const embeddingFailureService = new IngestionService({
+    embedDocument: async (documentId) => ({
+      documentId, provider: 'local', model: 'BAAI/bge-small-en-v1.5', status: 'FAILED', totalChunks: 1, embeddedChunks: 0, skippedChunks: 0, failedChunks: 1,
+    }),
+  });
+  const embeddingFailed = await embeddingFailureService.uploadDocument(userId, knowledgeBase.id, {
+    originalFileName: 'embedding-fail.txt', mimeType: 'text/plain', buffer: Buffer.from('Text extracted successfully but embeddings will fail.'),
+  });
+  assert.equal(embeddingFailed.status, 'FAILED');
+  assert.equal((await prisma.document.findUniqueOrThrow({ where: { id: embeddingFailed.id } })).status, 'FAILED');
 });
+
+test('extracts text from PDF, DOCX, and UTF-8 TXT without trusting their MIME types', async () => {
+  const pdfText = await extractTextFromFile('pdf', makePdf('Extracted PDF test text'));
+  assert.match(pdfText, /Extracted PDF test text/);
+
+  const docxText = await extractTextFromFile('docx', makeDocx('<w:p><w:r><w:t>Extracted DOCX test text</w:t></w:r></w:p>'));
+  assert.match(docxText, /Extracted DOCX test text/);
+
+  assert.equal(await extractTextFromFile('txt', Buffer.from('UTF-8 text ✓')), 'UTF-8 text ✓');
+  await assert.rejects(() => extractTextFromFile('txt', Buffer.from([0xff, 0xfe])), /valid UTF-8/);
+  await assert.rejects(() => extractTextFromFile('docx', Buffer.from('PK broken')), /DOCX/);
+});
+
+function makePdf(text: string): Buffer {
+  const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  for (let index = 0; index < objects.length; index += 1) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets.slice(1)) pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, 'ascii');
+}
+
+function makeDocx(documentXml: string): Buffer {
+  const files: Array<[string, string]> = [
+    ['[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'],
+    ['_rels/.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'],
+    ['word/document.xml', `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${documentXml}<w:sectPr/></w:body></w:document>`],
+  ];
+  const crc32 = (data: Buffer): number => {
+    let crc = 0xffffffff;
+    for (const byte of data) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  };
+  const local: Buffer[] = [];
+  const central: Buffer[] = [];
+  let localOffset = 0;
+  for (const [name, value] of files) {
+    const nameBytes = Buffer.from(name);
+    const raw = Buffer.from(value);
+    const compressed = deflateRawSync(raw);
+    const crc = crc32(raw);
+    const header = Buffer.alloc(30);
+    header.writeUInt32LE(0x04034b50, 0);
+    header.writeUInt16LE(20, 4);
+    header.writeUInt16LE(8, 8);
+    header.writeUInt32LE(crc, 14);
+    header.writeUInt32LE(compressed.length, 18);
+    header.writeUInt32LE(raw.length, 22);
+    header.writeUInt16LE(nameBytes.length, 26);
+    local.push(header, nameBytes, compressed);
+
+    const directory = Buffer.alloc(46);
+    directory.writeUInt32LE(0x02014b50, 0);
+    directory.writeUInt16LE(20, 4);
+    directory.writeUInt16LE(20, 6);
+    directory.writeUInt16LE(8, 10);
+    directory.writeUInt32LE(crc, 16);
+    directory.writeUInt32LE(compressed.length, 20);
+    directory.writeUInt32LE(raw.length, 24);
+    directory.writeUInt16LE(nameBytes.length, 28);
+    directory.writeUInt32LE(localOffset, 42);
+    central.push(directory, nameBytes);
+    localOffset += header.length + nameBytes.length + compressed.length;
+  }
+  const centralDirectory = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralDirectory.length, 12);
+  end.writeUInt32LE(localOffset, 16);
+  return Buffer.concat([...local, centralDirectory, end]);
+}

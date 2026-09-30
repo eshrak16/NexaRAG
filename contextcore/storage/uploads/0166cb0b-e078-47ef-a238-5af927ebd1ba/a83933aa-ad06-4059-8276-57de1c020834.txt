@@ -1,0 +1,1 @@
+Text extracted successfully but embeddings will fail.

@@ -1,6 +1,7 @@
 import { prisma } from '../../database/prisma.js';
 import { HttpAuthError } from '../auth/auth.service.js';
 import { OrganizationRole } from '../organizations/organization.types.js';
+import { can } from '../organizations/permissions.js';
 import { KnowledgeBaseListQuery, KnowledgeBaseSummary } from './knowledgebase.types.js';
 
 export type KnowledgeBaseCreateInput = {
@@ -34,7 +35,7 @@ export class KnowledgeBaseService {
       throw new HttpAuthError('FORBIDDEN', 'You do not have access to this organization.', 403);
     }
 
-    if (membership.role === 'VIEWER') {
+    if (!can(membership.role, 'knowledge_base:create')) {
       throw new HttpAuthError('FORBIDDEN', 'VIEWER users cannot create knowledge bases.', 403);
     }
 
@@ -143,7 +144,7 @@ export class KnowledgeBaseService {
 
   async updateKnowledgeBase(knowledgeBaseId: string, userId: string, input: KnowledgeBaseUpdateInput): Promise<KnowledgeBaseSummary> {
     const membership = await this.getMembershipForKnowledgeBase(knowledgeBaseId, userId);
-    if (!membership || !['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role)) {
+    if (!membership || !can(membership.role, 'knowledge_base:update')) {
       throw new HttpAuthError('FORBIDDEN', 'You do not have permission to update this knowledge base.', 403);
     }
 
@@ -167,7 +168,7 @@ export class KnowledgeBaseService {
 
   async deleteKnowledgeBase(knowledgeBaseId: string, userId: string): Promise<KnowledgeBaseSummary> {
     const membership = await this.getMembershipForKnowledgeBase(knowledgeBaseId, userId);
-    if (!membership || !['OWNER', 'ADMIN'].includes(membership.role)) {
+    if (!membership || !can(membership.role, 'knowledge_base:delete')) {
       throw new HttpAuthError('FORBIDDEN', 'You do not have permission to delete this knowledge base.', 403);
     }
 
